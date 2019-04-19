@@ -2,19 +2,25 @@ package com.xmcc.service.impl;
 
 import com.xmcc.commons.*;
 import com.xmcc.dto.OrderDetailDto;
+import com.xmcc.dto.OrderMasterDetailDto;
 import com.xmcc.dto.OrderMasterDto;
+import com.xmcc.dto.OrderMasterPageBean;
 import com.xmcc.entity.OrderDetail;
 import com.xmcc.entity.OrderMaster;
 import com.xmcc.entity.ProductInfo;
 import com.xmcc.exception.CustomException;
-import com.xmcc.repository.OrderDetailRepository;
 import com.xmcc.repository.OrderMasterRepository;
+import com.xmcc.repository.ProductInfoRepository;
 import com.xmcc.service.OrderDetailService;
 import com.xmcc.service.OrderMasterService;
 import com.xmcc.service.ProductInfoService;
 import com.xmcc.utils.BigDecimalUtil;
 import com.xmcc.utils.IDUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 
@@ -24,6 +30,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class OrderMasterServiceImpl implements OrderMasterService {
@@ -36,6 +43,9 @@ public class OrderMasterServiceImpl implements OrderMasterService {
 
     @Autowired
     private OrderMasterRepository masterRepository;
+
+    @Autowired
+    private ProductInfoRepository infoRepository;
 
     /**
      * 生成订单
@@ -95,5 +105,51 @@ public class OrderMasterServiceImpl implements OrderMasterService {
         HashMap<String, String> map = new HashMap<>();
         map.put("orderId",orderId);
         return ResultResponse.success(map);
+    }
+    /**查询订单分页*/
+    @Override
+    public ResultResponse findByOrderMasterPageBean(OrderMasterPageBean orderMasterPageBean) {
+        //获取openid查询数据
+        String openid = orderMasterPageBean.getOpenid();
+        //设置分页参数（第几页，每页几条数据，排序方式）
+        Pageable pageable = PageRequest.of(orderMasterPageBean.getPage(),orderMasterPageBean.getSize(), Sort.Direction.DESC,"update_time");
+        Page<OrderMaster> masters = masterRepository.findByBuyerOpenid(openid, pageable);
+        List<OrderMaster> masterList = masters.getContent();
+        return ResultResponse.success(masterList);
+    }
+
+    /**查询订单详情*/
+    @Override
+    public ResultResponse findOrderMasterDetail(String openId,String orderId){
+        //查询订单
+        OrderMaster orderMaster = masterRepository.findByOrderIdAndBuyerOpenid(orderId, openId);
+        if (orderMaster == null){
+            return ResultResponse.fail(ResultEnums.NOT_ORDER_EXITS.getMsg());
+        }
+        //查询订单项
+        List<OrderDetail> details = detailService.findDetailByOrderId(orderId);
+        //封装masterDetailDto
+        OrderMasterDetailDto masterDetailDto = OrderMasterDetailDto.build(orderMaster);
+        masterDetailDto.setDetails(details);
+        return ResultResponse.success(masterDetailDto);
+    }
+
+    /**取消订单*/
+    @Override
+    @Transactional
+    public ResultResponse cancelOrderMaster(String openId, String orderId) {
+        //查询订单
+        OrderMaster orderMaster = masterRepository.findByOrderIdAndBuyerOpenid(orderId, openId);
+        if (orderMaster == null){
+            return ResultResponse.fail(ResultEnums.NOT_ORDER_EXITS.getMsg());
+        }
+        //TODO:判断订单状态，满足状态才能取消
+        orderMaster.setOrderStatus(OrderEnum.CANCEL.getCode());
+        masterRepository.save(orderMaster);
+        List<OrderDetail> detailList = detailService.findDetailByOrderId(orderId);
+        for ( OrderDetail detail : detailList
+             ) {
+        }
+        return ResultResponse.success();
     }
 }

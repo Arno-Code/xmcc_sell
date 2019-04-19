@@ -11,6 +11,7 @@ public enum OrderEnum {
 
     CANCEL(2,"已取消");
 
+
     private int code;
 
     private String msg;
